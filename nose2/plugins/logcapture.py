@@ -97,7 +97,12 @@ class LogCapture(Plugin):
 
     def _addCapturedLogs(self, event):
         format = self.handler.format
-        records = [format(r) for r in self.handler.buffer]
+        records = []
+        for r in self.handler.buffer:
+            try:
+                records.append( format(r) )
+            except AttributeError:
+                records.append( "FAILED RECORD %r" % r )
         if 'logs' in event.metadata:
             event.metadata['logs'].extend(records)
         else:
