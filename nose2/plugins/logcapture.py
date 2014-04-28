@@ -101,7 +101,7 @@ class LogCapture(Plugin):
         for r in self.handler.buffer:
             try:
                 records.append( format(r) )
-            except (AttributeError,TypeError):
+            except (AttributeError,TypeError,UnicodeDecodeError):
                 records.append( "FAILED RECORD %r" % r )
         if 'logs' in event.metadata:
             event.metadata['logs'].extend(records)
