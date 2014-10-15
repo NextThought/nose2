@@ -19,6 +19,7 @@ import os.path
 import time
 import re
 import sys
+import json
 from xml.etree import ElementTree as ET
 
 import six
@@ -29,7 +30,6 @@ __unittest = True
 
 
 class JUnitXmlReporter(events.Plugin):
-
     """Output junit-xml test report to file"""
     configSection = 'junit-xml'
     commandLineSwitch = ('X', 'junit-xml', 'Generate junit-xml output report')
@@ -39,6 +39,9 @@ class JUnitXmlReporter(events.Plugin):
             self.config.as_str('path', default='nose2-junit.xml'))
         self.keep_restricted = self.config.as_bool('keep_restricted',
                                                    default=False)
+        self.test_properties = self.config.as_str('test_properties')
+        if self.test_properties is not None:
+            self.test_properties_path = os.path.realpath(self.test_properties)
         self.errors = 0
         self.failed = 0
         self.skipped = 0
@@ -96,10 +99,21 @@ class JUnitXmlReporter(events.Plugin):
             skipped.set('message', 'expected test failure')
             skipped.text = msg
 
+        system_err = ET.SubElement(testcase, 'system-err')
+        system_err.text = string_cleanup(
+            '\n'.join(event.metadata.get('logs', '')),
+            self.keep_restricted
+        )
+
     def _check(self):
         if not os.path.exists(os.path.dirname(self.path)):
-            raise IOError(2, 'JUnitXML: Parent folder does not exist for file', self.path)
-    
+            raise IOError(2, 'JUnitXML: Parent folder does not exist for file',
+                          self.path)
+        if self.test_properties is not None:
+            if not os.path.exists(self.test_properties_path):
+                raise IOError(2, 'JUnitXML: Properties file does not exist',
+                              self.test_properties_path)
+
     def stopTestRun(self, event):
         """Output xml tree to file"""
         self.tree.set('name', 'nose2-junit')
@@ -109,12 +123,31 @@ class JUnitXmlReporter(events.Plugin):
         self.tree.set('tests', str(self.numtests))
         self.tree.set('time', "%.3f" % event.timeTaken)
 
-        self._indent_tree(self.tree)
-        
         self._check()
-        
+        self._include_test_properties()
+        self._indent_tree(self.tree)
+
         output = ET.ElementTree(self.tree)
         output.write(self.path, encoding="utf-8")
+
+    def _include_test_properties(self):
+        """Include test properties in xml tree"""
+        if self.test_properties is None:
+            return
+
+        props = {}
+        with open(self.test_properties_path) as data:
+            try:
+                props = json.loads(data.read())
+            except ValueError:
+                raise ValueError('JUnitXML: could not decode file: \'%s\'' %
+                                 self.test_properties_path)
+
+        properties = ET.SubElement(self.tree, 'properties')
+        for key, val in props.items():
+            prop = ET.SubElement(properties, 'property')
+            prop.set('name', key)
+            prop.set('value', val)
 
     def _indent_tree(self, elem, level=0):
         """In-place pretty formatting of the ElementTree structure."""
@@ -140,6 +173,7 @@ class JUnitXmlReporter(events.Plugin):
         finally:
             self._start = None
         return 0
+
 
 #
 # xml utility functions
@@ -179,12 +213,12 @@ if sys.maxunicode > 0xFFFF:
 ILLEGAL_REGEX_STR = \
     six.u('[') + \
     six.u('').join(["%s-%s" % (_unichr(l), _unichr(h))
-                   for (l, h) in ILLEGAL_RANGES]) + \
+                    for (l, h) in ILLEGAL_RANGES]) + \
     six.u(']')
 RESTRICTED_REGEX_STR = \
     six.u('[') + \
     six.u('').join(["%s-%s" % (_unichr(l), _unichr(h))
-                   for (l, h) in RESTRICTED_RANGES]) + \
+                    for (l, h) in RESTRICTED_RANGES]) + \
     six.u(']')
 
 _ILLEGAL_REGEX = re.compile(ILLEGAL_REGEX_STR, re.U)
@@ -192,7 +226,6 @@ _RESTRICTED_REGEX = re.compile(RESTRICTED_REGEX_STR, re.U)
 
 
 def string_cleanup(string, keep_restricted=False):
-
     if not issubclass(type(string), six.text_type):
         string = six.text_type(string, encoding='utf-8', errors='replace')
 

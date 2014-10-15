@@ -2,7 +2,7 @@ import os
 import sys
 
 NAME = 'nose2'
-VERSION = '0.4.7'
+VERSION = '0.5.0'
 PACKAGES = ['nose2', 'nose2.plugins', 'nose2.plugins.loader',
             'nose2.tests', 'nose2.tests.functional', 'nose2.tests.unit',
             'nose2.tools', 'nose2.backports']
@@ -64,7 +64,7 @@ except ImportError:
     from distutils.core import setup
 else:
 
-    REQS = ['six']
+    REQS = ['six>=1.1']
     if sys.version_info < (2, 7):
         REQS.extend(['unittest2>=0.5.1,<0.6', 'argparse>=1.2.1,<1.3'])
 
